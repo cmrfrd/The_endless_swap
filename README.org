@@ -40,9 +40,9 @@
       store that will pretend to be our "remote" cloud storage. To setup this
       storage run
 
-      ```
+      #+begin_src sh
       docker-compose up
-      ```
+      #+end_src
 
       This sets up a running `minio` instance.
 
@@ -51,10 +51,10 @@
       To further isolate your host system from this project, we will be creating
       a VM to play around in. To start the vm defined in the project run
 
-      ```
+      #+begin_src sh
       vagrant box add generic/ubuntu1804 --provider=libvirt
       vagrant up
-      ```
+      #+end_src
 
       This just sets up a vanilla ubuntu VM connected to the bridge interface
       created by `docker`
@@ -66,13 +66,13 @@
 
       First get the IP of the running minio container:
 
-      ```
+      #+begin_src sh
       docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' <id of container>
-      ```
+      #+end_src
 
       Then gain access into the vm via `vagrant ssh` and follow the next set of commands
 
-      ```
+      #+begin_src sh
       ## Install s3fs
       sudo apt-get update -y
       sudo apt-get install s3fs -y
@@ -98,11 +98,11 @@
          -o umask=0007,uid=1000 \
          -o dbglevel=info \
          -f -o curldbg
-      ```
+      #+end_src
 
    4. Extend your swap via a loop device attached to a swapfile in s3fs
 
-      ```
+      #+begin_src sh
       ## Create 50MB swap file in s3fs
       dd if=/dev/zero of=/tmp/endless_swap/swapfile count=50000 bs=1024
 
@@ -114,7 +114,7 @@
 
       ## Register loop device as swap
       ls /tmp/endless_swap/swapfile* | xargs -I{} bash -c "losetup -j {} | cut -d':' -f1" | sudo xargs swapon
-      ```
+      #+end_src
 
       Congrats! Your swap has been extended via a remote swap file. Repeat step 4
       again and again to keep adding swap.
@@ -124,9 +124,9 @@
       To test our new fancy remote swap, we can run a memory constrained python
       instance and validate we are using the swap with `htop`
 
-      ```
+      #+begin_src sh
       sudo systemd-run --scope -p MemoryMax=40M python3
       ...
       ...
       ...
-      ```
+      #+end_src
