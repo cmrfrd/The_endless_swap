@@ -1,0 +1,132 @@
+* The endless swap
+
+  By: Alexander Comerford (alex@taoa.io)
+
+  In computer land, when people refer to "the swap" they normally are talking
+  about the place on the hard drive that stores inactive memory pages of
+  programs. The swap enables the OS to trick processes into believing that they
+  have more physical memory then what actually exists. When processes try to
+  access an address that isn't loaded in physical memory, a "page fault"
+  triggers and the OS will try to get it from "the swap".
+
+  It is commonly believed that swap is not a replacement for "actual" memory for
+  reasons of performance. I say who cares. I believe the illusion of memory is a
+  powerful abstraction and provides more utility than it's cost. Even more so I
+  think this abstraction can be taken further.
+
+  Why not abstract the idea of the swap such that it lives on another machine or
+  in cloud storage for pennies on the dollar. Processes and a majority of their
+  memory don't have to exist on the same machine.
+
+  It must be mentioned though that this abstraction does not focus on
+  performance. Software abstractions are not magic and often rely on an exchange
+  principle. In this case we are gaining and endless swap in exchange for the
+  performance hit of page faults and network bandwidth.
+
+  I belive this is a fair and almost beneficial exchange and is well worth using
+  when the time is right. I hope you do to.
+
+  Here is how to set it up.
+
+** Setting up the endless swap
+
+   Currently this project is not setup in an easily digestable package,
+   therefore this repo will act more as a "runbook" rather than an out of the
+   box system.
+
+   1. Mocking s3
+
+      For the sake of self containment, we will be setting up a local object
+      store that will pretend to be our "remote" cloud storage. To setup this
+      storage run
+
+      ```
+      docker-compose up
+      ```
+
+      This sets up a running `minio` instance.
+
+   2. Creating a sandbox VM
+
+      To further isolate your host system from this project, we will be creating
+      a VM to play around in. To start the vm defined in the project run
+
+      ```
+      vagrant box add generic/ubuntu1804 --provider=libvirt
+      vagrant up
+      ```
+
+      This just sets up a vanilla ubuntu VM connected to the bridge interface
+      created by `docker`
+
+   3. Installing and running `s3fs`
+
+      The main tool we will leverage for connecting to a remote storage location
+      is `s3fs` using a FUSE.
+
+      First get the IP of the running minio container:
+
+      ```
+      docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' <id of container>
+      ```
+
+      Then gain access into the vm via `vagrant ssh` and follow the next set of commands
+
+      ```
+      ## Install s3fs
+      sudo apt-get update -y
+      sudo apt-get install s3fs -y
+
+      ## Setup dirs and pw
+      mkdir -p /tmp/endless_swap
+      echo 'minio:minio123' > /tmp/pass
+      chmod 600 /tmp/pass
+
+      ## Create bucket for swap
+      s3fs beep2 /tmp/endless_swap \
+         -f -o passwd_file=/tmp/pass \
+         -o createbucket \
+         -o url=http://<ip of container>:9000/ \
+         -o use_path_request_style \
+         -o umask=0007,uid=1000
+
+      ## Run s3fs in the foreground
+      s3fs beep2 /tmp/endless_swap \
+         -f -o passwd_file=/tmp/pass \
+         -o url=http://<ip of container>:9000/ \
+         -o use_path_request_style \
+         -o umask=0007,uid=1000 \
+         -o dbglevel=info \
+         -f -o curldbg
+      ```
+
+   4. Extend your swap via a loop device attached to a swapfile in s3fs
+
+      ```
+      ## Create 50MB swap file in s3fs
+      dd if=/dev/zero of=/tmp/endless_swap/swapfile count=50000 bs=1024
+
+      ## Register as swap
+      ls /tmp/endless_swap/swapfile* | xargs -I{} bash -c "mkswap {}"
+
+      ## Setup loop device
+      ls /tmp/endless_swap/swapfile* | xargs -I{} bash -c "losetup -f {}"
+
+      ## Register loop device as swap
+      ls /tmp/endless_swap/swapfile* | xargs -I{} bash -c "losetup -j {} | cut -d':' -f1" | sudo xargs swapon
+      ```
+
+      Congrats! Your swap has been extended via a remote swap file. Repeat step 4
+      again and again to keep adding swap.
+
+   5. Testing
+
+      To test our new fancy remote swap, we can run a memory constrained python
+      instance and validate we are using the swap with `htop`
+
+      ```
+      sudo systemd-run --scope -p MemoryMax=40M python3
+      ...
+      ...
+      ...
+      ```

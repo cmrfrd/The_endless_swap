@@ -1,0 +1,23 @@
+version: '3.7'
+
+services:
+  minio1:
+    image: minio/minio:latest
+    hostname: minio1
+    volumes:
+      - vol1:/data
+    networks:
+      - endless_swap
+    expose:
+      - "9000"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    command: server /data
+volumes:
+  vol1:
+networks:
+  swap:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: "endless_swap"
